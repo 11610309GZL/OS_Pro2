@@ -39,24 +39,16 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* extrat arguments */
-  char *token, *save_ptr;
-  int my_argc = 0;
-  char * my_argv[20];
-
-
-  for (my_argv[my_argc] = strtok_r (*fn_copy, " ", &save_ptr); my_argv[my_argc] != NULL;
-      my_argv[my_argc] = strtok_r (NULL, " ", &save_ptr)) {
-        my_argc ++;
-      }
-
-
+  /* extrat filename */
+  char *real_fn, *save_ptr;
+  real_fn = malloc(strlen(file_name) + 1);
+  real_fn = strtok_r (*fn_copy, " ", &save_ptr);
 
 
 
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (real_fn, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -68,6 +60,8 @@ static void
 start_process (void *file_name_)
 {
   char *file_name = file_name_;
+  char *save_ptr;
+  file_name  = strtok_r (file_name_, " ", &save_ptr);
   struct intr_frame if_;
   bool success;
 
