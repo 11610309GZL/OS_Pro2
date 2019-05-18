@@ -42,8 +42,9 @@ process_execute (const char *file_name)
   /* extrat filename */
   char *real_fn, *save_ptr;
   real_fn = malloc(strlen(file_name) + 1);
-  real_fn = strtok_r (*fn_copy, " ", &save_ptr);
+  real_fn = strtok_r (fn_copy, " ", &save_ptr);
 
+ 
 
 
 
@@ -60,8 +61,6 @@ static void
 start_process (void *file_name_)
 {
   char *file_name = file_name_;
-  char *save_ptr;
-  file_name  = strtok_r (file_name_, " ", &save_ptr);
   struct intr_frame if_;
   bool success;
 
@@ -206,7 +205,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (void **esp, char * file_name);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -226,14 +225,27 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  // need to ac the lock of the system
+
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
+  /* get the real file name */
+  char *real_fn = malloc(strlen(file_name) + 1);
+  strlcpy(real_fn, file_name, strlen(file_name) + 1);
+
+  char *save_ptr;
+  real_fn = strtok_r(real_fn, " ", &save_ptr);
+
   /* Open executable file. */
-  file = filesys_open (file_name);
+  file = filesys_open (real_fn);
+
+  free(real_fn);
+
+
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
@@ -313,8 +325,13 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, file_name))
     goto done;
+
+  enum intr_level old_level = intr_disable();
+
+
+  intr_set_level (old_level);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -438,7 +455,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (void **esp, char *file_name) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -452,6 +469,68 @@ setup_stack (void **esp)
       else
         palloc_free_page (kpage);
     }
+
+  char *token, *save_ptr;
+  int argc = 0,i;
+
+  // copy the 
+  char * copy = malloc(strlen(file_name)+1);
+  strlcpy (copy, file_name, strlen(file_name)+1);
+
+  // get argc
+  for (token = strtok_r (copy, " ", &save_ptr); token != NULL;
+    token = strtok_r (NULL, " ", &save_ptr))
+    argc++;
+
+  int *argv = calloc(argc,sizeof(int));
+
+  // push the argv value
+  for (token = strtok_r (file_name, " ", &save_ptr),i=0; token != NULL;
+    token = strtok_r (NULL, " ", &save_ptr), i++)
+    {
+      *esp -= strlen(token) + 1;
+      memcpy(*esp,token,strlen(token) + 1);
+
+      argv[i]=*esp;
+    }
+
+  // word align
+  while((int)*esp%4!=0)
+  {
+    *esp-=sizeof(char);
+    char x = 0;
+    memcpy(*esp,&x,sizeof(char));
+  }
+
+  // null pointer
+  int zero = 0;
+
+  *esp-=sizeof(int);
+  memcpy(*esp,&zero,sizeof(int));
+
+  // push argv[] pointer
+  for(i=argc-1;i>=0;i--)
+  {
+    *esp-=sizeof(int);
+    memcpy(*esp,&argv[i],sizeof(int));
+  }
+
+  // push argv
+  int ptr = *esp;
+  *esp-=sizeof(int);
+  memcpy(*esp,&ptr,sizeof(int));
+
+  // push argc
+  *esp-=sizeof(int);
+  memcpy(*esp,&argc,sizeof(int));
+
+  // push return address
+  *esp-=sizeof(int);
+  memcpy(*esp,&zero,sizeof(int));
+
+  free(copy);
+  free(argv);
+
   return success;
 }
 
