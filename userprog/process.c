@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "userprog/syscall.h"
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -31,7 +33,8 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  
+  struct thread * current_thread = thread_current();
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -44,14 +47,21 @@ process_execute (const char *file_name)
   real_fn = malloc(strlen(file_name) + 1);
   real_fn = strtok_r (fn_copy, " ", &save_ptr);
 
- 
-
-
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (real_fn, PRI_DEFAULT, start_process, fn_copy);
+
+  free(real_fn);
+
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  else {
+    sema_down(&current_thread->load_sema);
+    
+    if(!current_thread->child_load_success) {
+      return TID_ERROR;
+    }
+  }
   return tid;
 }
 
@@ -70,11 +80,22 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+  // tell the current thread's parent success
+  struct thread * current_thread = thread_current();
+  current_thread->parent->child_load_success = success;
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+
+  sema_up(&current_thread->parent->load_sema);
+  
+  if (!success) {
+    // current_thread->tid = -1;
+    thread_exit (); // may be modified
+  }
+  
+  
+  // sema_up(&t->SemaWaitSuccess);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -98,7 +119,30 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  struct thread *current_thread = thread_current ();
+
+  enum intr_level old_level = intr_disable();
+
+  struct list_elem *wait_child_elem = find_child_elem(current_thread, child_tid);
+  struct child_data *wait_child = list_entry (wait_child_elem, struct child_data, child_elem);
+  intr_set_level (old_level);
+
+  if(wait_child_elem == NULL || wait_child == NULL)
+    return -1;
+
+  current_thread->waiting_child = wait_child;
+  //current_thread->waiting_child = ch;
+
+
+ // correspongding system call in syscal_wait
+  if(!wait_child->waited_by_parent){
+    sema_down(&current_thread->wait_sema);
+   }
+
+
+  list_remove(wait_child_elem);
+
+  return wait_child->exit_status;
 }
 
 /* Free the current process's resources. */
@@ -107,6 +151,16 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  int exit_status = cur->exit_status;
+  if (exit_status != INIT_EXIT_STATUS) {
+    exit_process(-1);
+  }
+
+  printf("%s: exit(%d)\n",cur->name,exit_status);
+
+  // need to release all files
+
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -233,15 +287,19 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  /* get the real file name */
+  /* get the real file name 
+     limit to 14 */
   char *real_fn = malloc(strlen(file_name) + 1);
   strlcpy(real_fn, file_name, strlen(file_name) + 1);
 
+  char *final_fn = malloc(15);
+
+
   char *save_ptr;
-  real_fn = strtok_r(real_fn, " ", &save_ptr);
+  final_fn = strtok_r(real_fn, " ", &save_ptr);
 
   /* Open executable file. */
-  file = filesys_open (real_fn);
+  file = filesys_open (final_fn);
 
   free(real_fn);
 
@@ -473,7 +531,7 @@ setup_stack (void **esp, char *file_name)
   char *token, *save_ptr;
   int argc = 0,i;
 
-  // copy the 
+  // copy the command
   char * copy = malloc(strlen(file_name)+1);
   strlcpy (copy, file_name, strlen(file_name)+1);
 
@@ -495,14 +553,14 @@ setup_stack (void **esp, char *file_name)
     }
 
   // word align
-  while((int)*esp%4!=0)
+  while((uint32_t)*esp%4!=0)
   {
     *esp-=sizeof(char);
     char x = 0;
     memcpy(*esp,&x,sizeof(char));
   }
 
-  // null pointer
+  // push null pointer
   int zero = 0;
 
   *esp-=sizeof(int);
@@ -511,14 +569,14 @@ setup_stack (void **esp, char *file_name)
   // push argv[] pointer
   for(i=argc-1;i>=0;i--)
   {
-    *esp-=sizeof(int);
-    memcpy(*esp,&argv[i],sizeof(int));
+    *esp-=sizeof(uint32_t);
+    memcpy(*esp,&argv[i],sizeof(uint32_t));
   }
 
   // push argv
-  int ptr = *esp;
-  *esp-=sizeof(int);
-  memcpy(*esp,&ptr,sizeof(int));
+  uint32_t ptr = *esp;
+  *esp-=sizeof(uint32_t);
+  memcpy(*esp,&ptr,sizeof(uint32_t));
 
   // push argc
   *esp-=sizeof(int);

@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -71,6 +72,31 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+
+struct list_elem*
+find_child_elem(struct thread* parent, tid_t child_tid)
+{
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  struct list_elem *tmp_elem;
+
+  for (tmp_elem = list_begin (&parent->children); tmp_elem != list_end (&parent->children);
+          tmp_elem = list_next (tmp_elem))
+      {
+        struct child_data *tmp_child = list_entry(tmp_elem, struct child_data, child_elem);
+        if(tmp_child->tid == child_tid)
+        {
+          return tmp_elem;
+        }
+      }
+  return NULL;
+}
+
+
+
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -98,6 +124,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->exit_status = INIT_EXIT_STATUS;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -184,6 +211,17 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+
+  // create child process
+  struct child_data* child = malloc(sizeof(struct child_data));
+  child->tid = tid;
+  child->exit_status = t->exit_status;
+  child->waited_by_parent = false;
+  list_push_back(&t->children, &child->child_elem);
+
+
+
+
 
   /* Create the stack atomically */
   old_level = intr_disable ();
@@ -288,6 +326,17 @@ void
 thread_exit (void) 
 {
   ASSERT (!intr_context ());
+
+  /* check whether the exiting process is waited by its parent */
+  enum intr_level old_level = intr_disable();
+  if (thread_current()->parent->waiting_child != NULL)
+  {
+    if (thread_current()->parent->waiting_child->tid == thread_current()->tid)
+      sema_up(&thread_current()->parent->wait_sema);
+  }
+  intr_set_level(old_level);
+
+
 
 #ifdef USERPROG
   process_exit ();
@@ -470,6 +519,19 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+
+  list_init(&t->children);
+  t->parent = running_thread();
+  list_init(&t->opened_files);
+  t->fd_count = 2;
+  t->exit_status = INIT_EXIT_STATUS;
+
+  sema_init(&t->load_sema, 0);
+  sema_init(&t->wait_sema, 0);
+
+  t->waiting_child = NULL;
+  t->excutable = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

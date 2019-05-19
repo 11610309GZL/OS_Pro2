@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include "fixed_point.h"
 
+#include <threads/synch.h>
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -81,6 +83,11 @@ typedef int tid_t;
    only because they are mutually exclusive: only a thread in the
    ready state is on the run queue, whereas only a thread in the
    blocked state is on a semaphore wait list. */
+
+
+#define INIT_EXIT_STATUS -100
+
+
 struct thread
   {
     /* Owned by thread.c. */
@@ -94,6 +101,19 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    int exit_status;                    /* exit status */
+    bool child_load_success;
+    struct semaphore load_sema;
+    struct semaphore wait_sema;
+    struct list children;
+
+    struct thread* parent; 
+    struct file *excutable;
+    struct list opened_files;
+    int fd_count;
+
+    struct child_data * waiting_child;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -102,6 +122,18 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+struct child_data {
+      int tid;
+      struct list_elem child_elem;   // for waiting child list
+      int exit_status;   //store its exit status to pass it to its parent 
+          
+      /*whether the child process has been waited()
+      according to the document: a process may wait for any given child at most once.
+      if_waited would be initialized to false*/
+      bool waited_by_parent;
+      
+    };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -140,3 +172,7 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 #endif /* threads/thread.h */
+
+#ifdef USERPROG
+struct list_elem* find_child_elem(strct thread * parent, tid_t child_tid);
+#endif
