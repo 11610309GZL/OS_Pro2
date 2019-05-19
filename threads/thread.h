@@ -172,5 +172,5 @@ int thread_get_load_avg (void);
 #endif /* threads/thread.h */
 
 #ifdef USERPROG
-struct list_elem* find_child_elem(struct thread * parent, tid_t child_tid);
+struct list_elem* find_child_elem(tid_t child_tid);
 #endif

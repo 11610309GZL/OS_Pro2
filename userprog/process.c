@@ -45,19 +45,19 @@ process_execute (const char *file_name)
   /* extrat filename */
   char *real_fn, *save_ptr;
   real_fn = malloc(strlen(file_name) + 1);
-  real_fn = strtok_r (fn_copy, " ", &save_ptr);
+  strlcpy (real_fn, file_name, strlen(file_name)+1);
+  real_fn = strtok_r (real_fn, " ", &save_ptr);
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (real_fn, PRI_DEFAULT, start_process, fn_copy);
 
-  free(real_fn);
 
 
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   else {
     sema_down(&current_thread->load_sema);
-    
+    // free(real_fn);
     if(!current_thread->child_load_success) {
       return TID_ERROR;
     }
@@ -123,7 +123,7 @@ process_wait (tid_t child_tid UNUSED)
 
   enum intr_level old_level = intr_disable();
 
-  struct list_elem *wait_child_elem = find_child_elem(current_thread, child_tid);
+  struct list_elem *wait_child_elem = find_child_elem(child_tid);
   struct child_data *wait_child = list_entry (wait_child_elem, struct child_data, child_elem);
   intr_set_level (old_level);
 
@@ -153,8 +153,8 @@ process_exit (void)
   uint32_t *pd;
 
   int exit_status = cur->exit_status;
-  if (exit_status != INIT_EXIT_STATUS) {
-    exit_process(-1);
+  if (exit_status == INIT_EXIT_STATUS) {
+    exit_p(-1);
   }
 
   printf("%s: exit(%d)\n",cur->name,exit_status);

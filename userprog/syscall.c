@@ -12,7 +12,7 @@
 #include "devices/input.h"
 
 
-void exit(int status);
+void exit_p(int status);
 static void syscall_handler (struct intr_frame *);
 static void syscall_write(struct intr_frame *f);
 static void syscall_halt (void);
@@ -36,7 +36,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   // check the stack pointer is in user space
   if(!is_user_vaddr(stack_ptr)) {
-    ExitStatus(-1);
+    exit_p(-1);
   }
 
   /* get the syscall number */
@@ -62,13 +62,9 @@ syscall_handler (struct intr_frame *f UNUSED)
   }
 
 
-
-
-
-  thread_exit ();
 }
 
-void exit(int status)    
+void exit_p(int status)    
 {
     struct thread *cur = thread_current();
     struct child_data *child;
@@ -110,16 +106,16 @@ static void syscall_halt (void) {
 
 static void syscall_exit(struct intr_frame *f) {
   if(!is_user_vaddr(((int *)f->esp)+2))
-    exit(-1);
+    exit_p(-1);
   struct thread *cur = thread_current();
-  
-  int exit_status = *((int *)f->esp+1);
-  exit(exit_status);
+  int *esp = f->esp;
+  int exit_status = *(esp+1);
+  exit_p(exit_status);
 }
 
 static void syscall_wait(struct intr_frame *f) {
   if(!is_user_vaddr(((int *)f->esp)+2))
-    exit(-1);
+    exit_p(-1);
 
   tid_t tid=*((int *)f->esp+1);
     if(tid!=-1)
@@ -134,10 +130,10 @@ static void syscall_write(struct intr_frame *f) {
   int *esp = f->esp;
 
   if(!is_user_vaddr(esp+7))
-      exit(-1);
-  int fd = *(esp + 2);
-  char *buffer=(char *)*(esp+6); 
-  unsigned int size=*(esp+3);       
+      exit_p(-1);
+  int fd = *(esp + 1);
+  char *buffer=(char *)*(esp+2); 
+  unsigned size=*(esp+3);       
 
 
   if(fd==1) // stdout

@@ -75,13 +75,13 @@ static tid_t allocate_tid (void);
 
 
 struct list_elem*
-find_child_elem(struct thread* parent, tid_t child_tid)
+find_child_elem(tid_t child_tid)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
   struct list_elem *tmp_elem;
 
-  for (tmp_elem = list_begin (&parent->children); tmp_elem != list_end (&parent->children);
+  for (tmp_elem = list_begin (&thread_current()->children); tmp_elem != list_end (&thread_current()->children);
           tmp_elem = list_next (tmp_elem))
       {
         struct child_data *tmp_child = list_entry(tmp_elem, struct child_data, child_elem);
