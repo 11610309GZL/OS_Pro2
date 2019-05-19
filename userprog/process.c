@@ -57,7 +57,6 @@ process_execute (const char *file_name)
     palloc_free_page (fn_copy); 
   else {
     sema_down(&current_thread->load_sema);
-    // free(real_fn);
     if(!current_thread->child_load_success) {
       return TID_ERROR;
     }
@@ -162,11 +161,12 @@ process_exit (void)
   if(lock_held_by_current_thread(&filesys_lock))
      lock_release(&filesys_lock);
 
-  // need to release all files
+  //Release all files opened by current thread
   if( !lock_held_by_current_thread(&filesys_lock) )
      lock_acquire(&filesys_lock);
   struct occupy_file* occufile;
   struct list_elem* e;
+  //Close files and Destory struct occupy_file
   while(!list_empty(&cur->opened_files)){
     e = list_pop_front(&cur->opened_files);
     occufile = list_entry(e, struct occupy_file, file_elem);
@@ -175,6 +175,8 @@ process_exit (void)
   }
   lock_release(&filesys_lock);
 
+  //Handle all children process, empty children list
+  //and destory child_data
   struct child_data* cd;  
   while(!list_empty(&cur->children)){
     e = list_pop_front(&cur->children);
