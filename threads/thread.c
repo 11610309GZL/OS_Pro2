@@ -116,6 +116,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&filesys_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -217,6 +218,7 @@ thread_create (const char *name, int priority,
   child->exit_status = t->exit_status;
   child->is_exited = false;
   sema_init(&(child->wait_sema),0);
+  
   list_push_back(&running_thread()->children, &child->child_elem);
 
 

@@ -20,6 +20,7 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
+struct lock filesys_lock;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
@@ -104,7 +105,7 @@ struct thread
     int exit_status;                    /* exit status */
     bool child_load_success;
     struct semaphore load_sema;
-
+    bool load_success;
     struct list children;
 
     struct thread* parent; 
