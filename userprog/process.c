@@ -386,10 +386,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (!setup_stack (esp, file_name))
     goto done;
 
-  enum intr_level old_level = intr_disable();
 
-
-  intr_set_level (old_level);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -511,7 +508,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 }
 
 /* Create a minimal stack by mapping a zeroed page at the top of
-   user virtual memory. */
+   user virtual memory. 
+   Added: push the argc and argv in to the stack
+   */
 static bool
 setup_stack (void **esp, char *file_name) 
 {
@@ -529,9 +528,9 @@ setup_stack (void **esp, char *file_name)
     }
 
   char *token, *save_ptr;
-  int argc = 0,i;
+  int argc = 0, i;
 
-  // copy the command
+  // copy the command stirng
   char * copy = malloc(strlen(file_name)+1);
   strlcpy (copy, file_name, strlen(file_name)+1);
 
@@ -586,6 +585,7 @@ setup_stack (void **esp, char *file_name)
   *esp-=sizeof(int);
   memcpy(*esp,&zero,sizeof(int));
 
+  // do free
   free(copy);
   free(argv);
 

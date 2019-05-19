@@ -19,23 +19,40 @@ static void syscall_exit(struct intr_frame *f);
 static void syscall_wait(struct intr_frame *f);
 static void syscall_exec(struct intr_frame *f);
 static inline bool is_mapped_user_vaddr (const void *vaddr);
+static int syscall_argc (int sys_number);
 
-static inline bool
-is_mapped_user_vaddr (const void *vaddr)
-{
-  //Will I need to see if vaddr + 7 is in the kernel space?
-  //Or if vaddr is a kernel address, would pagedir_get_page
-  //just return NULL for vaddr?
-  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + 3))
-    return false;
+int syscall_practice(struct intr_frame *f);
+
+
+static int
+syscall_argc (int sys_number) {
   
-  //top                                   bot
-  //1111 1111 1111 1111   1111 1111 1111 1111
-  //esp   +1   +2   +3     +4   +5   +6   +7
-  struct thread *t = thread_current ();
-  void* top = pagedir_get_page (t->pagedir, vaddr);
-  void* bot = pagedir_get_page (t->pagedir, vaddr + 3);
-  return (top && bot);
+  switch (sys_number) {
+    case SYS_HALT:
+      return 0;
+    
+    case SYS_EXIT:
+    case SYS_EXEC:
+    case SYS_WAIT:
+    case SYS_REMOVE:
+    case SYS_OPEN:
+    case SYS_FILESIZE:
+    case SYS_TELL:
+    case SYS_CLOSE:
+    case SYS_PRACTICE:
+      return 1;
+    
+    case SYS_CREATE:
+    case SYS_SEEK:
+      return 2;
+    
+    case SYS_READ:
+    case SYS_WRITE:
+      return 3;
+    
+    default:
+      return -1;
+  }
 }
 
 void
@@ -49,20 +66,40 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  // printf ("system call!\n");
   int* stack_ptr = f->esp;
 
-  if ((uint8_t *) stack_ptr <= pg_round_up(f->eip)) {
+  /* test <sc-bad-sp> just check the case where the stack pointer is 
+  *  below the PC. And the page allocated for f->eip is at the very
+  *  bottom of the the user's space. So it's clear that no pointer 
+  *  should be lower than it. 
+  * */
+  uint8_t* tmp =  f->esp;
+  void * a = (void *)tmp;
+  void * b = pg_round_up(f->eip);
+  if ((void *)tmp <= pg_round_up(f->eip)) {
     exit_p(-1);
   }
+
+  
 
   // check the stack pointer is in user space
   if(!is_user_vaddr(stack_ptr)) {
     exit_p(-1);
   }
 
+  
+
   /* get the syscall number */
   int sys_num = *stack_ptr; 
+
+  int argc = syscall_argc(sys_num);
+  /* check the paramenter pointer */
+  if (argc > 0 && !is_user_vaddr(stack_ptr + argc)) {
+    exit_p(-1);
+  }
+
+
+
 
   /* handle system call */
   switch (sys_num)
@@ -79,6 +116,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   case SYS_EXEC:
     syscall_exec(f);
     break;
+  case SYS_PRACTICE:
+    f->eax = syscall_practice(f);
 
   case SYS_WAIT:
     syscall_wait(f);
@@ -132,8 +171,14 @@ static void syscall_halt (void) {
   shutdown_power_off();
 }
 
+int syscall_practice(struct intr_frame *f) {
+  int *esp = f->esp;
+  int arg = *(esp + 1);
+  return arg + 1;
+}
+
 static void syscall_exit(struct intr_frame *f) {
-  if(!is_user_vaddr(((int *)f->esp)+2))
+  if(!is_user_vaddr(((int *)f->esp)+1))
     exit_p(-1);
   struct thread *cur = thread_current();
   int *esp = f->esp;
@@ -160,11 +205,8 @@ static void syscall_exec(struct intr_frame *f) {
   
   char *file_name = (char *)*(esp+1);
 
-  int * name_st = esp + 1;
-  int * name_end = esp + 1 + 14;
 
-
-  if (!is_user_vaddr(name_st) || !is_user_vaddr(name_end)) {
+  if (!is_user_vaddr(file_name)) {
     exit_p(-1);
   }
 
@@ -178,11 +220,15 @@ static void syscall_exec(struct intr_frame *f) {
 static void syscall_write(struct intr_frame *f) {
   int *esp = f->esp;
 
-  if(!is_user_vaddr(esp+7))
-      exit_p(-1);
+  
   int fd = *(esp + 1);
   char *buffer=(char *)*(esp+2); 
   unsigned size=*(esp+3);       
+
+  int length = strlen(buffer);
+  if (! is_user_vaddr(esp + 4) || ! is_user_vaddr(esp + 2 + length)) {
+    exit_p(-1);
+  }
 
 
   if(fd==1) // stdout
