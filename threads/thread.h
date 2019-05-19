@@ -104,7 +104,7 @@ struct thread
     int exit_status;                    /* exit status */
     bool child_load_success;
     struct semaphore load_sema;
-    struct semaphore wait_sema;
+
     struct list children;
 
     struct thread* parent; 
@@ -127,12 +127,10 @@ struct child_data {
       int tid;
       struct list_elem child_elem;   // for waiting child list
       int exit_status;   //store its exit status to pass it to its parent 
-          
-      /*whether the child process has been waited()
-      according to the document: a process may wait for any given child at most once.
-      if_waited would be initialized to false*/
-      bool waited_by_parent;
-      
+
+      // store weather the child process is exited, if exited the wait don't UP the wait_sema
+      bool is_exited;    
+      struct semaphore wait_sema;
     };
 
 /* If false (default), use round-robin scheduler.

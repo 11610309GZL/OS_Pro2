@@ -135,9 +135,9 @@ process_wait (tid_t child_tid UNUSED)
 
 
  // correspongding system call in syscal_wait
-  if(!wait_child->waited_by_parent){
-    sema_down(&current_thread->wait_sema);
-   }
+  if(!wait_child->is_exited){
+    sema_down(&wait_child->wait_sema);
+  }
 
 
   list_remove(wait_child_elem);

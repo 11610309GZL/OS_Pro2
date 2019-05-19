@@ -124,7 +124,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  initial_thread->exit_status = INIT_EXIT_STATUS;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -212,12 +211,13 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
-  // create child process
+  // create child struct of new created process
   struct child_data* child = malloc(sizeof(struct child_data));
   child->tid = tid;
   child->exit_status = t->exit_status;
-  child->waited_by_parent = false;
-  list_push_back(&t->children, &child->child_elem);
+  child->is_exited = false;
+  sema_init(&(child->wait_sema),0);
+  list_push_back(&running_thread()->children, &child->child_elem);
 
 
 
@@ -332,7 +332,7 @@ thread_exit (void)
   if (thread_current()->parent->waiting_child != NULL)
   {
     if (thread_current()->parent->waiting_child->tid == thread_current()->tid)
-      sema_up(&thread_current()->parent->wait_sema);
+      sema_up(&thread_current()->parent->waiting_child->wait_sema);
   }
   intr_set_level(old_level);
 
@@ -528,7 +528,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->exit_status = INIT_EXIT_STATUS;
 
   sema_init(&t->load_sema, 0);
-  sema_init(&t->wait_sema, 0);
 
   t->waiting_child = NULL;
   t->excutable = NULL;

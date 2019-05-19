@@ -83,6 +83,9 @@ static void syscall_exit(struct intr_frame *f) {
 
 }
 
+static void syscall_wait(struct intr_frame *f) {
+  
+}
 
 static void syscall_write(struct intr_frame *f) {
   int *esp = f->esp;
