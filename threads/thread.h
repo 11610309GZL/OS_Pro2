@@ -101,14 +101,15 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-    int exit_status;                    /* exit status */
-    bool child_load_success;
-    struct semaphore load_sema;
+    int exit_status;                     /* exit status, every thread's initial exit status 
+                                          * is INIT_EXIT_STATUS except for the kernel thread*/
+    bool child_load_success;             /* after child  load, pass sucess to parent->child_load_success */
+    struct semaphore load_sema;          /* lock of load, when the child is loading, lock its parent */
 
-    struct list children;
+    struct list children;                /* list of this process' children, list elem is struct child_data*/
 
-    struct thread* parent; 
-    struct file *excutable;
+    struct thread* parent;               /* parent of this process */
+    struct file *excutable;              /* the child this process is waiting, process only wait one child in pintos at one time */
     struct list opened_files;
     int fd_count;
 
