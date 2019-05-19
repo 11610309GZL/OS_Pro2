@@ -34,6 +34,10 @@ syscall_handler (struct intr_frame *f UNUSED)
   // printf ("system call!\n");
   int* stack_ptr = f->esp;
 
+  if ((uint8_t *) stack_ptr <= pg_round_up(f->eip)) {
+    exit_p(-1);
+  }
+
   // check the stack pointer is in user space
   if(!is_user_vaddr(stack_ptr)) {
     exit_p(-1);
