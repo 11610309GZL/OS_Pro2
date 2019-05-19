@@ -67,18 +67,27 @@ void syscall_seek(struct intr_frame *f);
 unsigned syscall_tell(struct intr_frame *f);
 void syscall_close(struct intr_frame *f);
 
+<<<<<<< HEAD
 
+=======
+/**/
+>>>>>>> ba1a9b3ef398aa3cf42b5f2c9d529abd3dec79bd
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-
-
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+<<<<<<< HEAD
+=======
+  // printf ("system call!\n");
+  if (f==NULL)
+    exit_p(-1);
+
+>>>>>>> ba1a9b3ef398aa3cf42b5f2c9d529abd3dec79bd
   int* stack_ptr = f->esp;
 
   /* test <sc-bad-sp> just check the case where the stack pointer is 
@@ -119,7 +128,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   {
   case SYS_HALT:    syscall_halt();      break;
   case SYS_EXIT:    syscall_exit(f);     break;
-  // case SYS_WRITE: syscall_write(f); break;
   case SYS_EXEC:    syscall_exec(f);     break;
   case SYS_WAIT:    syscall_wait(f);     break;
   case SYS_CREATE:  f->eax=syscall_create(f);   break;
@@ -148,8 +156,7 @@ void exit_p(int status)
     enum intr_level old_level = intr_disable();
 
     /* tell the parent this process is exit 
-      if the parent wait this exited process, end wait correctly use the child data
-    */
+      if the parent wait this exited process, end wait correctly use the child data */
     for (struct list_elem *e = list_begin(&cur->parent->children); e != list_end(&cur->parent->children); e = list_next(e))
     {
       child = list_entry(e, struct child_data, child_elem);
@@ -176,6 +183,7 @@ void exit_p(int status)
     thread_exit();
 }
 
+/* Shutdown the system using function shutdown_power_off()*/
 static void syscall_halt (void) {
   shutdown_power_off();
 }
@@ -226,6 +234,7 @@ static void syscall_exec(struct intr_frame *f) {
   f->eax = process_execute(file_name);
 }
 
+/*Check if this is a vaild address in user memory space*/
 bool
 is_mapped_user_vaddr(const void *vaddr){
   if(!is_user_vaddr(vaddr))
@@ -236,14 +245,7 @@ is_mapped_user_vaddr(const void *vaddr){
   return true;
 }
 
-// void
-// get_stack(int *esp, int *val, int offset){ 
-//   int *tmp_esp = esp + offset;
-//   if(!is_mapped_user_vaddr(tmp_esp))
-//     exit_p(-1);
-//   *val = *((int *)pagedir_get_page(thread_current()->pagedir, tmp_esp));
-// }
-
+/* Search a spacific file occupied by a thread, using file descriptor (fd) */
 struct occupy_file* 
 search_occupy_file(int fd, struct list* opened_files){
   struct occupy_file* occufile;
@@ -255,26 +257,24 @@ search_occupy_file(int fd, struct list* opened_files){
   return NULL;
 }
 
-
+/* Creat a new file with specific initial positon */
 bool
 syscall_create(struct intr_frame *f){
   int *esp = f->esp;
   bool res;
-
+  //Check if parameter are vaild.
   if( (!is_mapped_user_vaddr(esp + 1)) || (!is_mapped_user_vaddr(esp + 2)) )
     exit_p(-1);
 
   char* file = (char *)*(esp + 1);
   unsigned initial_size = *(esp + 2);
-  // get_stack(f->esp, &file, 1);
-  // get_stack(f->esp, &initial_size, 2);
 
   if(!is_mapped_user_vaddr(file))
     exit_p(-1);
-
-  if(file == NULL || file[0] == '\0')
+  //If file name is NULL or empty, exit with -1
+  if(file == NULL || file[1] == '\0')
     exit_p(-1);
-
+  //Aquire for the file system lock
   lock_acquire(&filesys_lock);
   res = filesys_create(file, initial_size);
   lock_release(&filesys_lock);
@@ -282,6 +282,8 @@ syscall_create(struct intr_frame *f){
   return res;
 }
 
+/* Remove a file with specific name, if name is ilegal or remove 
+fail, return false*/
 bool
 syscall_remove(struct intr_frame *f){
   int *esp = f->esp;
@@ -289,17 +291,22 @@ syscall_remove(struct intr_frame *f){
   if( !is_mapped_user_vaddr(esp + 1) )
     exit_p(-1);
   char* file = (char *)*(esp + 1);
-  // get_stack(f->esp, &file, 1);
 
   if(!is_mapped_user_vaddr(file))
     return false;
   
+  if(file == NULL || file[1] == '\0')
+    return false;
+
   lock_acquire(&filesys_lock);
   res = (filesys_remove(file)==NULL);
   lock_release(&filesys_lock);
   return res;
 }
 
+/* Open a file with specific name, if name is NULL exit with -1,
+Once the file is open, create a occupy_file to put in opened_files
+list in current thread, also refresh the fd_count for current thread.*/
 int
 syscall_open(struct intr_frame *f){
   int *esp = f->esp;
@@ -309,18 +316,17 @@ syscall_open(struct intr_frame *f){
     exit_p(-1);
 
   char *file = (char *)*(esp + 1);
+  //Check NULL file name.
   if(file == NULL)
     exit_p(-1);
-  // get_stack(f->esp, &file, 1);
 
-  // if(!is_valid_addr(file))
-  //   return -1;
-
+  //Try to open the file.
   lock_acquire(&filesys_lock);
   struct file *fileptr = filesys_open(file);
   lock_release(&filesys_lock);
-
+  //If Open fail, return -1
   if(fileptr == NULL) return -1;
+  //Once Open success, record the file in opened_files list
   else{
     struct thread* cur = thread_current();
     struct occupy_file *occufile = malloc(sizeof(*occufile));
@@ -333,6 +339,9 @@ syscall_open(struct intr_frame *f){
   return res;
 }
 
+/* Return the file size for an OPENED file, which is 
+already in the opened_files list of CURRENT thread, find 
+the specific file using file discriptor*/
 int
 syscall_filesize(struct intr_frame *f){
   int *esp = f->esp;
@@ -341,19 +350,22 @@ syscall_filesize(struct intr_frame *f){
   if( !is_mapped_user_vaddr(esp + 1) )
     exit_p(-1);
   int fd = *(esp + 1);
-
-  // get_stack(f->esp, &fd, 1);
+  //Get the opened_files list of current thread
   struct thread* cur = thread_current();
+  //Search the file using file discriptor
   struct occupy_file* file = search_occupy_file(fd, &cur->opened_files); 
+  //If No file is found, return -1
   if(file == NULL)
     return -1;
-
+  //If found, aquire the lock and call file_length funtion
   lock_acquire(&filesys_lock);
   res = file_length(file->file_ptr);
   lock_release(&filesys_lock);
   return res;
 }
 
+/* Read data from STDIN or files, fd = 0 for STDIN
+and other fd value for files, */
 int 
 syscall_read(struct intr_frame *f){
   int *esp = f->esp;
@@ -364,41 +376,43 @@ syscall_read(struct intr_frame *f){
   int fd = *(esp + 1);
   void *buffer = (void *) *(esp + 2);
   unsigned size = *(esp + 3);
-  // pop_stack(f->esp, &size, 7);
-	// pop_stack(f->esp, &buffer, 6);
-	// pop_stack(f->esp, &fd, 5);
 
  if (!is_mapped_user_vaddr(buffer))
 		 return res = -1;
-
+  //If read from STDIN
   if(fd == 0)
   {
     uint8_t *buffer = buffer;
+    //STDIN using input_getc
     for(int i = 0; i < size; i++){
       buffer[i] = input_getc();
     }
     res = size;
+  //If read from FILE
   }else{
+    //Get the file pointer
     struct thread* cur = thread_current();
     struct occupy_file* occufile = search_occupy_file( fd,&cur->opened_files);
+    //If NOT find a file
     if(occufile == NULL)
       return res = -1;
     else{
-      
+      //If find the file but NULL file pointer
       if (occufile->file_ptr == NULL)
       {
         return res = -1;
       }
+      //Read
        lock_acquire(&filesys_lock);
 			 res = file_read(occufile->file_ptr, buffer, size);
 			 lock_release(&filesys_lock);
     }
   }
   return res;
-  // get_stack(f->esp, &size, 3)
 }
 
-
+/* Read data from STDOUT or files, fd = 1 for STDOUT
+and other fd value for files, */
 int
 syscall_write(struct intr_frame *f){
   int *esp = f->esp;
@@ -408,10 +422,12 @@ syscall_write(struct intr_frame *f){
       exit_p(-1);
   if( (!is_mapped_user_vaddr(esp + 1)) || (!is_mapped_user_vaddr(esp + 2)) || (!is_mapped_user_vaddr(esp + 3)) )
     exit_p(-1);
+
   int fd = *(esp + 1);
   char *buffer=(char *)*(esp + 2); 
   unsigned size=*(esp + 3);       
 
+<<<<<<< HEAD
   int length = strlen(buffer);
   if (! is_user_vaddr(esp + 4) || ! is_user_vaddr(esp + 2 + length)) {
     exit_p(-1);
@@ -419,28 +435,34 @@ syscall_write(struct intr_frame *f){
 
 
   if(fd == 1) // stdout
+=======
+  //STDOUT, using putbuf
+  if(fd == 1)
+>>>>>>> ba1a9b3ef398aa3cf42b5f2c9d529abd3dec79bd
   {
-        putbuf (buffer, size);
-        res = size;
-    }
-    else                        //file
+    putbuf (buffer, size);
+    res = size;
+  }
+  else{
+    //Find the file to write
+    enum intr_level old_level = intr_disable();
+    struct thread* cur = thread_current();
+    struct occupy_file* occufile = search_occupy_file(fd, &cur->opened_files);
+    intr_set_level (old_level);
+    //If NO file was found
+    if (occufile == NULL)
+      res = -1;
+    else
     {
-      enum intr_level old_level = intr_disable();
-      struct thread* cur = thread_current();
-      struct occupy_file* occufile = search_occupy_file(fd, &cur->opened_files);
-      intr_set_level (old_level);
-      if (occufile == NULL)
-        res = -1;
-      else
-      {
-        lock_acquire(&filesys_lock);
-        res = file_write(occufile->file_ptr, buffer, size);
-        lock_release(&filesys_lock);
-      }
+      lock_acquire(&filesys_lock);
+      res = file_write(occufile->file_ptr, buffer, size);
+      lock_release(&filesys_lock);
     }
-    return res;
+  }
+  return res;
 }
 
+/*Get to a spacific position of a OPENED file*/
 void
 syscall_seek(struct intr_frame *f){
   int * esp = f->esp;
@@ -448,25 +470,32 @@ syscall_seek(struct intr_frame *f){
     exit_p(-1);
   int fd = *(esp + 1);
   unsigned position = *(esp + 2);
+  //Find the file in the opened_list of current thread
   struct thread* cur = thread_current();
   struct occupy_file* occufile = search_occupy_file(fd, &cur->opened_files);
-
+  if(occufile == NULL)
+    exit_p(-1);
+  //Call file_seek 
   lock_acquire(&filesys_lock);
 	file_seek(occufile->file_ptr, position);
 	lock_release(&filesys_lock);
 }
 
+/*Returns the position of the next byte to be reador written in open 
+file fd, expressed in bytes from the beginning of the file.*/
 unsigned
 syscall_tell(struct intr_frame *f){
   int *esp = f->esp;
   if( (!is_mapped_user_vaddr(esp + 1)) )
     exit_p(-1);
-
   int fd = *(esp + 1);
+  //Search the file in the opened_files list
   struct thread* cur = thread_current();
   struct occupy_file* occufile = search_occupy_file(fd, &cur->opened_files);
   int res;
-
+  if(occufile == NULL)
+    exit_p(-1);
+  //Call file_tell function in filesys.c
   lock_acquire(&filesys_lock);
 	res = file_tell(occufile->file_ptr);
 	lock_release(&filesys_lock);
@@ -474,19 +503,23 @@ syscall_tell(struct intr_frame *f){
   return res;
 }
 
+/*Close an opening file of the current thread*/
 void
 syscall_close(struct intr_frame *f){
   int * esp = f->esp;
   if( (!is_mapped_user_vaddr(esp + 1)) )
     exit_p(-1);
   int fd = *(esp + 1);
+  //Search the file in opened_files list 
   struct thread* cur = thread_current();
   struct occupy_file* occufile = search_occupy_file(fd ,&cur->opened_files);
-
+  //If the file is found
   if(occufile != NULL){
     lock_acquire(&filesys_lock);
+    //Remove the file from opened_files list
     list_remove(&occufile->file_elem);
 	  file_close(occufile->file_ptr);
+    //Destory the list element
     free(occufile);
 	  lock_release(&filesys_lock);
   }

@@ -20,13 +20,15 @@ enum thread_status
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-struct lock filesys_lock;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Global File System Lock. */
+struct lock filesys_lock;
 
 /* A kernel thread or user process.
 
@@ -102,6 +104,7 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+<<<<<<< HEAD
     int exit_status;                     /* exit status, every thread's initial exit status 
                                           * is INIT_EXIT_STATUS except for the kernel thread*/
     bool child_load_success;             /* after child  load, pass sucess to parent->child_load_success */
@@ -111,6 +114,15 @@ struct thread
 
     struct thread* parent;               /* parent of this process */
     struct file *excutable;              /* the child this process is waiting, process only wait one child in pintos at one time */
+=======
+    int exit_status;                    /* exit status */
+    bool child_load_success;
+    struct semaphore load_sema;
+    struct list children;
+
+    struct thread* parent; 
+    struct file *excutable;
+>>>>>>> ba1a9b3ef398aa3cf42b5f2c9d529abd3dec79bd
     struct list opened_files;
     int fd_count;
 
