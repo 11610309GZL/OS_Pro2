@@ -12,13 +12,31 @@
 #include "devices/input.h"
 
 
-void exit_p(int status);
 static void syscall_handler (struct intr_frame *);
 static void syscall_write(struct intr_frame *f);
 static void syscall_halt (void);
 static void syscall_exit(struct intr_frame *f);
 static void syscall_wait(struct intr_frame *f);
+static void syscall_exec(struct intr_frame *f);
+static inline bool is_mapped_user_vaddr (const void *vaddr);
 
+static inline bool
+is_mapped_user_vaddr (const void *vaddr)
+{
+  //Will I need to see if vaddr + 7 is in the kernel space?
+  //Or if vaddr is a kernel address, would pagedir_get_page
+  //just return NULL for vaddr?
+  if (!is_user_vaddr (vaddr) || !is_user_vaddr (vaddr + 3))
+    return false;
+  
+  //top                                   bot
+  //1111 1111 1111 1111   1111 1111 1111 1111
+  //esp   +1   +2   +3     +4   +5   +6   +7
+  struct thread *t = thread_current ();
+  void* top = pagedir_get_page (t->pagedir, vaddr);
+  void* bot = pagedir_get_page (t->pagedir, vaddr + 3);
+  return (top && bot);
+}
 
 void
 syscall_init (void) 
@@ -57,6 +75,9 @@ syscall_handler (struct intr_frame *f UNUSED)
     break;
   case SYS_WRITE:
     syscall_write(f);
+     break;
+  case SYS_EXEC:
+    syscall_exec(f);
     break;
 
   case SYS_WAIT:
@@ -68,6 +89,9 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 }
 
+/* the exit method with exit_status, use this method instead of thread_exit() to
+*  exit a process
+*/
 void exit_p(int status)    
 {
     struct thread *cur = thread_current();
@@ -128,6 +152,27 @@ static void syscall_wait(struct intr_frame *f) {
     }
     else
       f->eax=-1;
+}
+
+static void syscall_exec(struct intr_frame *f) {
+  
+  int *esp = f->esp;
+  
+  char *file_name = (char *)*(esp+1);
+
+  int * name_st = esp + 1;
+  int * name_end = esp + 1 + 14;
+
+
+  if (!is_user_vaddr(name_st) || !is_user_vaddr(name_end)) {
+    exit_p(-1);
+  }
+
+
+  if (file_name == NULL || file_name[1] == '\0')
+    exit_p(-1);
+
+  f->eax = process_execute(file_name);
 }
 
 static void syscall_write(struct intr_frame *f) {
