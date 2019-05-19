@@ -327,17 +327,6 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-  /* check whether the exiting process is waited by its parent */
-  enum intr_level old_level = intr_disable();
-  if (thread_current()->parent->waiting_child != NULL)
-  {
-    if (thread_current()->parent->waiting_child->tid == thread_current()->tid)
-      sema_up(&thread_current()->parent->waiting_child->wait_sema);
-  }
-  intr_set_level(old_level);
-
-
-
 #ifdef USERPROG
   process_exit ();
 #endif
