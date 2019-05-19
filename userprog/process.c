@@ -160,7 +160,7 @@ process_exit (void)
   printf("%s: exit(%d)\n",cur->name,exit_status);
 
   if(lock_held_by_current_thread(&filesys_lock))
-     lock_release(&filesys_lock);
+      lock_release(&filesys_lock);
 
   // need to release all files
   if( !lock_held_by_current_thread(&filesys_lock) )
