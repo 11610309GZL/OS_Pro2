@@ -159,9 +159,29 @@ process_exit (void)
 
   printf("%s: exit(%d)\n",cur->name,exit_status);
 
+  if(lock_held_by_current_thread(&filesys_lock))
+     lock_release(&filesys_lock);
+
   // need to release all files
+  if( !lock_held_by_current_thread(&filesys_lock) )
+     lock_acquire(&filesys_lock);
+  struct occupy_file* occufile;
+  struct list_elem* e;
+  while(!list_empty(&cur->opened_files)){
+    e = list_pop_front(&cur->opened_files);
+    occufile = list_entry(e, struct occupy_file, file_elem);
+    file_close(occufile->file_ptr);
+    free(occufile);
+  }
+  lock_release(&filesys_lock);
 
-
+  struct child_data* cd;  
+  while(!list_empty(&cur->children)){
+    e = list_pop_front(&cur->children);
+    cd = list_entry(e, struct child_data, child_elem);
+    free(cd);
+  }
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
